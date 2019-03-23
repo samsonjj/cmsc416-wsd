@@ -1,3 +1,19 @@
+# Author: Jonathan Samson
+# Date: 3/26/19
+# Class: CMSC-416-001 VCU Spring 2019
+# Project: Programming Assignment 4
+# Title: decision-list.pl
+# 
+#   One of Natural Language Processing's (NLP's) essential challenges is word sense disambiguation (WSD). Similar spellins of
+# a single word often have different meanings. This can be seen in the dictionary, where most words have multiple
+# definitions. For example, run can be used to describe quick physical linear movement on foot, or the action of running
+# for a position in an organization. WSD takes up the issue of automatically distinguishing the particular definition, or sense,
+# of a word in text. This project applies WSD techniques to distinguise between two sense of the word "line": that of a phone
+# line, and that of a product line.
+# 
+# Example Input and Output:
+# perl decision-list.pl line-train.txt line-test.txt my-decision-list.txt > my-line-answers.txt
+#
 # 1) Parse training file.
 # 2) Create feature vector. Run each test and record successes vs actual sense.
 # 3) Rank each test based on frequency counts.
@@ -39,7 +55,7 @@ while( my $line = <$fhTrain> ) {
     chomp $line;
 
     # Check for <instance> tag.
-    if( $currentInstance eq "" && $line =~ /.*<\s*instance\s*(.*)>(.*)/) {
+    if($line =~ /.*<\s*instance\s*(.*)>(.*)/) {
         $currentInstance = $2;
     }
     # Check for </instance> tag
@@ -86,8 +102,6 @@ while( my $line = <$fhTrain> ) {
             }
         }
 
-        # print "[".join(", ", @featureVector)."]\n";
-
         $currentInstance = "";
     }
     # Otherwise, we are inbetween instance tags, so add all text to current instance.
@@ -102,13 +116,9 @@ my @rankedTestIds = sort {($b->{"correct"} / $b->{"total"})
 
 @rankedTestIds = map { $_->{"id"} } @rankedTestIds;
 
-print join(", ", @rankedTestIds)."\n";
-
-
 for my $key (sort keys %trainingCounts) {
     my $total = $trainingCounts{$key}{total};
     my $correct = $trainingCounts{$key}{correct};
-    print "$key, $total, $correct\n";
 }
 
 
@@ -119,14 +129,18 @@ for my $key (sort keys %trainingCounts) {
 open(my $fhTest, "<:encoding(UTF-8)", $testingFile)
     or die "Could not open file '$testingFile' $!";
 
+my $instanceId = "";
+$currentInstance = "";
+
 # Parse into each "instance".
 while( my $line = <$fhTest> ) {
 
     chomp $line;
 
     # Check for <instance> tag.
-    if( $currentInstance eq "" && $line =~ /.*<\s*instance\s*(.*)>(.*)/) {
+    if($line =~ /.*<\s*instance\s*(.*)>(.*)/) {
         $currentInstance = $2;
+        ($instanceId) = $line =~ /<instance.*id="(.*)"/;
     }
     # Check for </instance> tag
     elsif ($line =~ /(.*)<\/\s*instance\s*(.*)>(.*)/ ) {
@@ -154,17 +168,19 @@ while( my $line = <$fhTest> ) {
 
         my $numTests = scalar @rankedTestIds;
         my $senseFound = 0;
+        print "<answer instance=\"$instanceId\" senseid=\"";
         for( my $i=0; $i<$numTests; $i++ ) {
             my $testFeatureId = $rankedTestIds[$i];
             if( $featureVector[$testFeatureId] ne 0) {
-                print $featureVector[$testFeatureId]."\n";
+                print $featureVector[$testFeatureId];
                 $senseFound = 1;
                 last;
             }
         }
         if( $senseFound == 0 ) {
-            print "product\n";
+            print "product";
         }
+        print "\"/>\n";
         $currentInstance = "";
     }
     # Otherwise, we are inbetween instance tags, so add all text to current instance.
