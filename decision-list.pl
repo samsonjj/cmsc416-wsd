@@ -74,13 +74,7 @@ while( my $line = <$fhTrain> ) {
         # Most of the features will be searching the "bag of word" for certain key words.
         # Some other features will do different things.
 
-        my @featureVector = ();
-        $featureVector[0] = feature0(@tokens);
-        $featureVector[1] = feature1(@tokens);
-        $featureVector[2] = feature2(@tokens);
-        $featureVector[3] = feature3(@tokens);
-        $featureVector[4] = feature4(@tokens);
-        $featureVector[5] = feature5(@tokens);
+        my @featureVector = generateFeatureVector(@tokens);
 
         # Iterate through each feature and update "total" and "correct" counts;
         my $featureLength = scalar @featureVector;
@@ -116,10 +110,13 @@ my @rankedTestIds = sort {($b->{"correct"} / $b->{"total"})
 
 @rankedTestIds = map { $_->{"id"} } @rankedTestIds;
 
-for my $key (sort keys %trainingCounts) {
-    my $total = $trainingCounts{$key}{total};
-    my $correct = $trainingCounts{$key}{correct};
-}
+# for my $key (sort keys %trainingCounts) {
+#     my $total = $trainingCounts{$key}{total};
+#     my $correct = $trainingCounts{$key}{correct};
+#     print "$key: $total, $correct\n";
+# }
+
+# print join ", ", @rankedTestIds;
 
 
 
@@ -158,13 +155,8 @@ while( my $line = <$fhTest> ) {
         # Most of the features will be searching the "bag of word" for certain key words.
         # Some other features will do different things.
 
-        my @featureVector = ();
-        $featureVector[0] = feature0(@tokens);
-        $featureVector[1] = feature1(@tokens);
-        $featureVector[2] = feature2(@tokens);
-        $featureVector[3] = feature3(@tokens);
-        $featureVector[4] = feature4(@tokens);
-        $featureVector[5] = feature5(@tokens);
+        my @featureVector = generateFeatureVector(@tokens);
+
 
         my $numTests = scalar @rankedTestIds;
         my $senseFound = 0;
@@ -246,4 +238,40 @@ sub feature8 {
         return "phone";
     }
     return 0;
+}
+sub feature9 {
+    if ( grep( /^product$/, @_ ) ) {
+        return "product";
+    }
+    return 0;
+}
+sub feature9 {
+    if ( grep( /^money$/, @_ ) ) {
+        return "product";
+    }
+    return 0;
+}
+sub feature10 {
+    if ( grep( /^model$/, @_ ) ) {
+        return "product";
+    }
+    return 0;
+}
+sub generateFeatureVector {
+    my @tokens = @_;
+
+    my @featureVector = ();
+    $featureVector[0] = feature0(@tokens);
+    $featureVector[1] = feature1(@tokens);
+    $featureVector[2] = feature2(@tokens);
+    $featureVector[3] = feature3(@tokens);
+    $featureVector[4] = feature4(@tokens);
+    $featureVector[5] = feature5(@tokens);
+    $featureVector[6] = feature6(@tokens);
+    $featureVector[7] = feature7(@tokens);
+    $featureVector[8] = feature8(@tokens);
+    $featureVector[9] = feature9(@tokens);
+    # $featureVector[10] = feature10(@tokens);
+
+    return @featureVector;
 }

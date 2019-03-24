@@ -47,8 +47,6 @@ while( my $line = <$fhAnswers> ) {
     my($id) = $line =~ /instance="([^"]*)"/;
     my($sense) = $line =~ /senseid="([^"]*)"/;
 
-    print "id: $id\n";
-
     $answers{$id} = $sense;
 
     # # Make sure their ids match
@@ -69,14 +67,14 @@ while( my $line = <$fhKey> ) {
     }
 
     my ($sense) = $line =~ /senseid="([^"]*)"/;
-    print "sense: $sense\n";
 
     if( $sense eq $answers{$id} ) {
         $correct++;
     }
     $total++;
 }
+
 my $accuracy = $correct / $total;
 print "correct:     $correct\n";
 print "total:       $total\n";
-print "accuracy:    $accuracy\n;
+print "accuracy:    $accuracy\n";
