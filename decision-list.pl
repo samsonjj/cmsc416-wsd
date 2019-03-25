@@ -25,8 +25,7 @@ use strict;
 use warnings;
 use feature 'say';
 
-# trainingCounts keeps track of total frequency of features and the frequency of their successful prediction
-my %trainingCounts = ();
+my %bagOfWords = ();
 
 my $argCount = scalar @ARGV;
 if($argCount < 3) {
@@ -64,9 +63,10 @@ while( my $line = <$fhTrain> ) {
 
         # Process currentInstance
         my($correctSense) = $currentInstance =~ /<answer.*senseid="(.*)"/;
+
         my($context) = $currentInstance =~ /<context>(.*)<\/context>/s;
         $context =~ s/(<s>|<\/s>|<@>|<p>|<\/p>)//g;
-        $context =~ s/([,\.!\?])/ $1 /g;
+        $context =~ s/([,\.!\?"])/ $1 /g;
         my @tokens = split(/\s+/, $context);
 
         # We now need to create a feature vector for this context.
@@ -74,25 +74,12 @@ while( my $line = <$fhTrain> ) {
         # Most of the features will be searching the "bag of word" for certain key words.
         # Some other features will do different things.
 
-        my @featureVector = generateFeatureVector(@tokens);
-
-        # Iterate through each feature and update "total" and "correct" counts;
-        my $featureLength = scalar @featureVector;
-        for( my $i=0; $i<$featureLength; $i++) {
-            if( !exists $trainingCounts{$i}{"id"} ) {
-                $trainingCounts{$i}{"id"} = $i;
+        for my $word (@tokens) {
+            if( !exists $bagOfWords{$word}{$correctSense} ) {
+                $bagOfWords{$word}{$correctSense} = 1;
             }
-            if( !exists $trainingCounts{$i}{"total"} ) {
-                $trainingCounts{$i}{"total"} = 0;
-            }
-            if( !exists $trainingCounts{$i}{"correct"} ) {
-                $trainingCounts{$i}{"correct"} = 0;
-            }
-            if( $featureVector[$i] ne 0 ) {
-                $trainingCounts{$i}{"total"}++;
-            }
-            if( $featureVector[$i] eq $correctSense ) {
-                $trainingCounts{$i}{"correct"}++;
+            else {
+                $bagOfWords{$word}{$correctSense}++;
             }
         }
 
@@ -104,20 +91,79 @@ while( my $line = <$fhTrain> ) {
     }
 }
 
-my @rankedTestIds = sort {($b->{"correct"} / $b->{"total"})
-                    cmp ($a->{"correct"} / $a->{"total"})}
-                    values %trainingCounts;
+my $defaultSense = "";
+for my $word (sort keys %bagOfWords) {
+    my $countSum = 0;
+    my $maxKeyCount = 0;
+    my $maxKey = "";
+    for my $sense (sort keys %{ $bagOfWords{$word} }) {
+        $countSum += $bagOfWords{$word}{$sense};
+        # print $bagOfWords{$word}{$sense};
+        if( $bagOfWords{$word}{$sense} > $maxKeyCount ) {
+            $maxKeyCount = $bagOfWords{$word}{$sense};
+            $maxKey = $sense;
+        }
+        $defaultSense = $sense;
+    }
+    $bagOfWords{$word}{"maxKey"} = $maxKey;
+    $bagOfWords{$word}{"correctCount"} = $maxKeyCount;
+    $bagOfWords{$word}{"totalCount"} = $countSum;
+}
 
-@rankedTestIds = map { $_->{"id"} } @rankedTestIds;
+# my @rankedWords = sort {($bagOfWords{$b}{"correctCount"} / $bagOfWords{$b}{"totalCount"})
+#                     cmp ($bagOfWords{$a}{"correctCount"} / $bagOfWords{$a}{"totalCount"})}
+#                     sort keys %bagOfWords;
 
-# for my $key (sort keys %trainingCounts) {
-#     my $total = $trainingCounts{$key}{total};
-#     my $correct = $trainingCounts{$key}{correct};
-#     print "$key: $total, $correct\n";
+my @rankedWords = sort rankedSort (sort keys %bagOfWords);
+
+my $rankedWordsLength = scalar @rankedWords;
+for( my $i=0; $i<$rankedWordsLength; $i++ ) {
+    my $word = $rankedWords[$i];
+    my $correct = $bagOfWords{$word}{"correctCount"};
+    my $total = $bagOfWords{$word}{"totalCount"};
+    my $max = $bagOfWords{$word}{"maxKey"};
+    if ($total < 3) {
+        splice @rankedWords, $i, 1;
+        $i--;
+    }
+    $rankedWordsLength = scalar @rankedWords;
+}
+
+for( my $i=0; $i<$rankedWordsLength; $i++ ) {
+    my $word = $rankedWords[$i];
+    my $correct = $bagOfWords{$word}{"correctCount"};
+    my $total = $bagOfWords{$word}{"totalCount"};
+    my $max = $bagOfWords{$word}{"maxKey"};
+    # print "$word ($correct $total $max)\n";
+}
+
+# Open log file.
+# open(my $fhLog, ">:encoding(UTF-8)", $logFile)
+#     or die "Could not open file '$logFile' $!";
+
+# my @featureDescriptions = getFeatureDescriptions();
+# my $numTests = scalar @rankedTestIds;
+
+# for( my $i=0; $i<$numTests; $i++) {
+#     my $total =  $trainingCounts{$rankedTestIds[$i]}{"total"};
+#     my $correct =  $trainingCounts{$rankedTestIds[$i]}{"correct"};
+
+#     print $fhLog "Test $i: $featureDescriptions[$rankedTestIds[$i]]\n";
+#     print $fhLog "# instances: $total\n";
+#     print $fhLog "# correct: $correct\n";
 # }
 
-# print join ", ", @rankedTestIds;
-
+# my $mostCommonTag = "";
+# my $mostFrequentTagBaselineAccuracy = 0;
+# if( $totalPhone > $totalProduct ) {
+#     $mostCommonTag = "phone";
+#     $mostFrequentTagBaselineAccuracy = $totalPhone / ($totalPhone + $totalProduct);
+# }
+# else {
+#     $mostCommonTag = "product";
+#     $mostFrequentTagBaselineAccuracy = $totalProduct / ($totalPhone + $totalProduct);
+# }
+# print $fhLog "\n"."Baseline of most frequent tag in train file is $mostCommonTag with probability $mostFrequentTagBaselineAccuracy\n"; 
 
 
 #################### (idk) ####################
@@ -155,22 +201,19 @@ while( my $line = <$fhTest> ) {
         # Most of the features will be searching the "bag of word" for certain key words.
         # Some other features will do different things.
 
-        my @featureVector = generateFeatureVector(@tokens);
-
-
-        my $numTests = scalar @rankedTestIds;
-        my $senseFound = 0;
         print "<answer instance=\"$instanceId\" senseid=\"";
-        for( my $i=0; $i<$numTests; $i++ ) {
-            my $testFeatureId = $rankedTestIds[$i];
-            if( $featureVector[$testFeatureId] ne 0) {
-                print $featureVector[$testFeatureId];
+
+        my $senseFound = 0;
+        for my $word (@rankedWords) {
+            if( $context =~ /\Q$word/ ) {
+                print $bagOfWords{$word}{"maxKey"};
                 $senseFound = 1;
                 last;
             }
         }
+        $defaultSense = "phone";
         if( $senseFound == 0 ) {
-            print "product";
+            print $defaultSense;
         }
         print "\"/>\n";
         $currentInstance = "";
@@ -181,97 +224,13 @@ while( my $line = <$fhTest> ) {
     }
 }
 
-sub feature0 {
-    if ( grep( /phone$/, @_ ) ) {
-        return "phone";
+sub rankedSort {
+    if( ($bagOfWords{$b}{"correctCount"} / $bagOfWords{$b}{"totalCount"})
+    == ($bagOfWords{$a}{"correctCount"} / $bagOfWords{$a}{"totalCount"}) ) {
+        return $bagOfWords{$b}{"correctCount"} - $bagOfWords{$a}{"correctCount"};
     }
-    return 0;
-}
-sub feature1 {
-    if ( grep( /^growth$/, @_ ) ) {
-        return "product";
+    else {
+        return ($bagOfWords{$b}{"correctCount"} / $bagOfWords{$b}{"totalCount"})
+            cmp ($bagOfWords{$a}{"correctCount"} / $bagOfWords{$a}{"totalCount"}); 
     }
-    return 0;
-}
-sub feature2 {
-    if ( grep( /^business$/, @_ ) ) {
-        return "product";
-    }
-    return 0;
-}
-sub feature3 {
-    if ( grep( /^call$/, @_ ) ) {
-        return "phone";
-    }
-    return 0;
-}
-sub feature4 {
-    if ( grep( /^economy$/, @_ ) ) {
-        return "phone";
-    }
-    return 0;
-}
-sub feature5 {
-    if ( grep( /^transmit$/, @_ ) ) {
-        return "phone";
-    }
-    return 0;
-}
-sub feature6 {
-    if ( grep( /^wire$/, @_ ) ) {
-        return "phone";
-    }
-    return 0;
-}
-sub feature7 {
-    my $len = scalar @_;
-    for( my $i=0; $i<$len; $i++ ) {
-
-    }
-    if ( grep( /phone$/, @_ ) ) {
-        return "phone";
-    }
-    return 0;
-}
-sub feature8 {
-    if ( grep( /^wire$/, @_ ) ) {
-        return "phone";
-    }
-    return 0;
-}
-sub feature9 {
-    if ( grep( /^product$/, @_ ) ) {
-        return "product";
-    }
-    return 0;
-}
-sub feature9 {
-    if ( grep( /^money$/, @_ ) ) {
-        return "product";
-    }
-    return 0;
-}
-sub feature10 {
-    if ( grep( /^model$/, @_ ) ) {
-        return "product";
-    }
-    return 0;
-}
-sub generateFeatureVector {
-    my @tokens = @_;
-
-    my @featureVector = ();
-    $featureVector[0] = feature0(@tokens);
-    $featureVector[1] = feature1(@tokens);
-    $featureVector[2] = feature2(@tokens);
-    $featureVector[3] = feature3(@tokens);
-    $featureVector[4] = feature4(@tokens);
-    $featureVector[5] = feature5(@tokens);
-    $featureVector[6] = feature6(@tokens);
-    $featureVector[7] = feature7(@tokens);
-    $featureVector[8] = feature8(@tokens);
-    $featureVector[9] = feature9(@tokens);
-    # $featureVector[10] = feature10(@tokens);
-
-    return @featureVector;
 }
