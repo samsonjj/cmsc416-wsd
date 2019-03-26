@@ -3,14 +3,35 @@
 # Class: CMSC-416-001 VCU Spring 2019
 # Project: Programming Assignment 4
 # Title: decision-list.pl
-# 
+#
+#--------------------------------------------------------------------------
+#   Problem Statement
+#--------------------------------------------------------------------------
+#
 #   One of Natural Language Processing's (NLP's) essential challenges is word sense disambiguation (WSD). Similar spellins of
 # a single word often have different meanings. This can be seen in the dictionary, where most words have multiple
 # definitions. For example, run can be used to describe quick physical linear movement on foot, or the action of running
 # for a position in an organization. WSD takes up the issue of automatically distinguishing the particular definition, or sense,
 # of a word in text. This project applies WSD techniques to distinguise between senses given a training file and test file.
 # 
-# Example Input and Output:
+#--------------------------------------------------------------------------
+#   Usage Instructions and Example Input/Output
+#--------------------------------------------------------------------------
+#
+# This is a perl program, so some version of perl must be installed before executing the file.
+# See: https://www.perl.org/get.html
+#
+# To run the program, make sure you have a correclty training file and test file which match the format shown in the example
+# after this section. Execute the program with those two files as arguments, as well as a third argument for the desired
+# name of the log file, generated during program execution. The command should look as follows
+#
+#   perl decision-list.pl <training-file> <test-file> <log-file>
+#
+# During execution, the log file will be generated which details the list of tests (or decision list) which were used to
+# disambiguate between word senses. Additionally, a set of answers will be printed to standard output.
+#
+# Below is a sample run of the program.
+#
 # [IN-COMMAND] perl decision-list.pl line-train.txt line-test.txt my-decision-list.txt > my-line-answers.txt
 #
 # [IN-TRAINFILE]
@@ -39,6 +60,7 @@
 #   </instance>
 #   <instance id="line-n.w7_098:12684:">
 #   <context>
+#   ...
 #
 # [IN-KEYFILE]
 #   <answer instance="line-n.w8_059:8174:" senseid="phone"/>
@@ -69,8 +91,16 @@
 #   [SENSE]               phone
 #   ...
 #
+#--------------------------------------------------------------------------
+#   Algorithm
+#--------------------------------------------------------------------------
+#
+# Below is a description of the structure of this program and its algorithm.
 #
 # 1) Parse training file.
+#       * Use regex to gain the context as a string wihtout tags.
+#       * Use regex to get the actual sense.
+#       * Store (in the bagOfWords hash) the number of times each word appears with each sense.
 # 2) Create feature vector. Run each test and record successes vs actual sense.
 # 3) Rank each test based on frequency counts.
 # 4) Parse test file.
