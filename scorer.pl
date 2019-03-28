@@ -46,9 +46,16 @@
 # ...
 #
 # [OUT-STDOUT]
-# correct:     104
+# Useless use of numeric eq (==) in void context at scorer.pl line 154.
+# correct:     110
 # total:       126
-# accuracy:    0.825396825396825
+# accuracy:    0.873015873015873
+#
+# CONFUSION MATRIX
+# KEY is the correct sense, after which, sense predictions are shown in a comma delimited list. Counts are shown next to senses.
+#
+# KEY=product: (41)product(13)phone
+# KEY=phone: (69)phone(3)product
 #
 #--------------------------------------------------------------------------
 #   Algorithm
@@ -84,7 +91,7 @@ my $answersFile = $ARGV[0];
 my $keyFile = $ARGV[1];
 
 # Open answers file.
-open(my $fhAnswers, "<:encoding(UTF-16)", $answersFile)
+open(my $fhAnswers, "<:encoding(UTF-8)", $answersFile)
     or die "Could not open file '$answersFile' $!";
 
 # Open key file.
