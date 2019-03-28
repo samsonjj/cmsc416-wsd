@@ -1,5 +1,5 @@
 # Author: Jonathan Samson
-# Date: 3/26/19
+# Date: 3/28/19
 # Class: CMSC-416-001 VCU Spring 2019
 # Project: Programming Assignment 4
 # Title: decision-list.pl
@@ -96,6 +96,10 @@
 #--------------------------------------------------------------------------
 #
 # Below is a description of the structure of this program and its algorithm.
+# The main idea is to use a decision-list made of bagOfWords tests. These
+# tests search the context for a certain word, and if found, tag the instance
+# with a certain sense. The words, senses, and order of these tests are built
+# while looking through the training file.
 #
 # 1) Parse training file using regex.
 #       * Store the context as a string, removing extraneous tags.
