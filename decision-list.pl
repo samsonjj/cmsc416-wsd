@@ -97,41 +97,51 @@
 #
 # Below is a description of the structure of this program and its algorithm.
 #
-# 1) Parse training file.
-#       * Use regex to gain the context as a string wihtout tags.
-#       * Use regex to get the actual sense.
+# 1) Parse training file using regex.
+#       * Store the context as a string, removing extraneous tags.
+#           * In order to do this, we go through each line in the text, storing it beginning when we find an <instance> tag
+#             and stopping when we find a </instance> tag. Then we use regex to obtain the text within the context tags.
+#       * Retreive the sense which this context is tagged with.
 #       * Store (in the bagOfWords hash) the number of times each word appears with each sense.
-# 2) Create feature vector. Run each test and record successes vs actual sense.
-# 3) Rank each test based on frequency counts.
-# 4) Parse test file.
-# 5) Create feature vector. Run each test, create test vector, and check which one succeeded first based on ranking. Choose that sense.
-# 6) If no test passes, return default.
+# 2) For each word, calculate the sense which it appears with the most, the number of times it occured with that sense,
+#    and the number of times it occured in total.
+# 3) Rank each word, so that we have an ordering for usage in the decision-list tests.
+#       * Sort words with higher prediction accuracies first. If accuracy is the same, then sort by higher frequency first.
+# 4) Perform word-sense disambiguation on the test file, and display answers on STDOUT.
+#       * We accomplish this by testing the context for each of our trained bag-of-words tests, and on success, printing the
+#         approiate sense.
+#       * If none of the words are found within the context, print the default sense.
+
 
 use strict;
 use warnings;
 use feature 'say';
 
+# This is a two-dimensional hash which uses as keys the words found within training contexts,
+# and stores a dictionary of its associated senses and frequencies as values.
 my %bagOfWords = ();
 
+# Obtain the file names from the command line arguments.
 my $argCount = scalar @ARGV;
 if($argCount < 3) {
     die "You must enter 3 arguments for train, test, and log file."
 }
-
 my $trainingFile = $ARGV[0];
 my $testingFile = $ARGV[1];
 my $logFile = $ARGV[2];
 
-#################### (1) ####################
-# Parse Training file.
+#--------------------------------------------------------------------------
+#   (1) Parse the training file using regex.
+#--------------------------------------------------------------------------
 
 # Open training file.
 open(my $fhTrain, "<:encoding(UTF-8)", $trainingFile)
     or die "Could not open file '$trainingFile' $!";
 
-# Assume each tag (Ex: "<instance>" is contained on the same line), so not like "<ins\ntance>".
-# Assume each line only has one tag
+# Assume each tag (Ex: "<instance>") is contained on the same line, so not like "<ins\ntance>".
+# Assume each line only has one tag.
 
+# Stores the text of each instance, as we go from traverse each instance in the following while loop.
 my $currentInstance = "";
 
 # Parse into each "instance".
@@ -139,27 +149,31 @@ while( my $line = <$fhTrain> ) {
 
     chomp $line;
 
-    # Check for <instance> tag.
+    # | We will be storing lines until we have all the lines of a single instance.
+    # | So in order to do this, we check for instance tags within the text, and take appropriate action.
+
+    # Check for <instance> tag. If found, store the text (without the tag).
     if($line =~ /.*<\s*instance\s*(.*)>(.*)/) {
         $currentInstance = $2;
     }
-    # Check for </instance> tag
+
+    # Check for </instance> tag. If found, store text before the tag, and then process the instance.
     elsif ($line =~ /(.*)<\/\s*instance\s*(.*)>(.*)/ ) {
+
         $currentInstance = $currentInstance."\n".$1;
 
-        # Process currentInstance
+        # Process currentInstance.
+
+        # Get the sense.
         my($correctSense) = $currentInstance =~ /<answer.*senseid="(.*)"/;
 
+        # Get a list of tokens within the context, not including tags.
         my($context) = $currentInstance =~ /<context>(.*)<\/context>/s;
         $context =~ s/(<s>|<\/s>|<@>|<p>|<\/p>)//g;
         $context =~ s/([,\.!\?"])/ $1 /g;
         my @tokens = split(/\s+/, $context);
 
-        # We now need to create a feature vector for this context.
-        # We can do this with any set of features we want.
-        # Most of the features will be searching the "bag of word" for certain key words.
-        # Some other features will do different things.
-
+        # Increment the count of each word->sense pair as we iterate through each word in the context.
         for my $word (@tokens) {
             if( !exists $bagOfWords{$word}{$correctSense} ) {
                 $bagOfWords{$word}{$correctSense} = 1;
@@ -177,55 +191,73 @@ while( my $line = <$fhTrain> ) {
     }
 }
 
+#--------------------------------------------------------------------------
+#   (2) For each word, calculate the sense which it appears with the most,
+#       the number of times it occured with that sense, and the number of
+#       times it occured in total.
+#--------------------------------------------------------------------------
+
+# This is the sense which will be predicted if no test on the decision list succeeds.
 my $defaultSense = "";
+
+# Iterate through each word.
 for my $word (sort keys %bagOfWords) {
+
+    # Total count of this word's appearances.
     my $countSum = 0;
-    my $maxKeyCount = 0;
-    my $maxKey = "";
+    # Count of times the max sense has occured with this word.
+    my $maxSenseCount = 0;
+    # Which sense has occured with this word the most.
+    my $maxSense = "";
+    
+    # Iterate through each sense which the word appears with.
     for my $sense (sort keys %{ $bagOfWords{$word} }) {
+
+        # Increment total count.
         $countSum += $bagOfWords{$word}{$sense};
-        # print $bagOfWords{$word}{$sense};
-        if( $bagOfWords{$word}{$sense} > $maxKeyCount ) {
-            $maxKeyCount = $bagOfWords{$word}{$sense};
-            $maxKey = $sense;
+
+        # If we find a new max, store it and its count.
+        if( $bagOfWords{$word}{$sense} > $maxSenseCount ) {
+            $maxSenseCount = $bagOfWords{$word}{$sense};
+            $maxSense = $sense;
         }
         $defaultSense = $sense;
     }
-    $bagOfWords{$word}{"maxKey"} = $maxKey;
-    $bagOfWords{$word}{"correctCount"} = $maxKeyCount;
+
+    # Store the calculated values within hash.
+    $bagOfWords{$word}{"maxKey"} = $maxSense;
+    $bagOfWords{$word}{"correctCount"} = $maxSenseCount;
     $bagOfWords{$word}{"totalCount"} = $countSum;
 }
 
-# my @rankedWords = sort {($bagOfWords{$b}{"correctCount"} / $bagOfWords{$b}{"totalCount"})
-#                     cmp ($bagOfWords{$a}{"correctCount"} / $bagOfWords{$a}{"totalCount"})}
-#                     sort keys %bagOfWords;
+#--------------------------------------------------------------------------
+#   (3) Rank each word, so that we have an ordering for usage in the 
+#       decision-list tests.
+#--------------------------------------------------------------------------
 
+# Rank the words based off of their accuracy.
 my @rankedWords = sort rankedSort (sort keys %bagOfWords);
 
-my $rankedWordsLength = scalar @rankedWords;
-for( my $i=0; $i<$rankedWordsLength; $i++ ) {
-    my $word = $rankedWords[$i];
-    my $correct = $bagOfWords{$word}{"correctCount"};
-    my $total = $bagOfWords{$word}{"totalCount"};
-    my $max = $bagOfWords{$word}{"maxKey"};
-    if ($total < 5) {
-        splice @rankedWords, $i, 1;
-        $i--;
+# The sorting function for word rankings. Sorts by accuracy, but if accuracy is the same sorts by frequency. 
+sub rankedSort {
+    # Check if accruacy is same, if so sort by frequency.
+    if( ($bagOfWords{$b}{"correctCount"} / $bagOfWords{$b}{"totalCount"})
+    == ($bagOfWords{$a}{"correctCount"} / $bagOfWords{$a}{"totalCount"}) ) {
+        return $bagOfWords{$b}{"correctCount"} - $bagOfWords{$a}{"correctCount"};
     }
-    elsif ($correct / $total < .60) {
-        splice @rankedWords, $i, 1;
-        $i--;
+    # Sort by accuracy.
+    else {
+        return ($bagOfWords{$b}{"correctCount"} / $bagOfWords{$b}{"totalCount"})
+            cmp ($bagOfWords{$a}{"correctCount"} / $bagOfWords{$a}{"totalCount"}); 
     }
-    $rankedWordsLength = scalar @rankedWords;
 }
 
-for( my $i=0; $i<$rankedWordsLength; $i++ ) {
-    my $word = $rankedWords[$i];
-    my $correct = $bagOfWords{$word}{"correctCount"};
-    my $total = $bagOfWords{$word}{"totalCount"};
-    my $max = $bagOfWords{$word}{"maxKey"};
-    # print "$word ($correct $total $max)\n";
-}
+my $rankedWordsLength = scalar @rankedWords;
+
+#--------------------------------------------------------------------------
+#   (4) Create log file which contains descriptions of each of the
+#       tests used, their log likelihood, and predicted sense.
+#--------------------------------------------------------------------------
 
 # Open log file.
 open(my $fhLog, ">:encoding(UTF-8)", $logFile)
@@ -238,7 +270,7 @@ print $fhLog "Below is a description of each test (feature) of the decision-list
 print $fhLog "Any feature marked as 'BAG' was tested by searching the context (bag of words) for the given word.\n\n";
 
 for( my $i=0; $i<$rankedWordsLength; $i++ ) {
-    print $fhLog "[FEATURE]             (BAG) $rankedWords[$i]\n";
+    print $fhLog "[FEATURE ($i)]             (BAG) $rankedWords[$i]\n";
     my $correct = $bagOfWords{$rankedWords[$i]}{"correctCount"};
     my $total = $bagOfWords{$rankedWords[$i]}{"totalCount"};
     print $fhLog "[CORRECT]             $correct\n";
@@ -252,58 +284,52 @@ for( my $i=0; $i<$rankedWordsLength; $i++ ) {
     print $fhLog "[SENSE]               $sense\n\n";
 }
 
+#--------------------------------------------------------------------------
+#   (4) Perform word-sense disambiguation on the test file, and display
+#       answers on STDOUT.
+#--------------------------------------------------------------------------
 
-# my $mostCommonTag = "";
-# my $mostFrequentTagBaselineAccuracy = 0;
-# if( $totalPhone > $totalProduct ) {
-#     $mostCommonTag = "phone";
-#     $mostFrequentTagBaselineAccuracy = $totalPhone / ($totalPhone + $totalProduct);
-# }
-# else {
-#     $mostCommonTag = "product";
-#     $mostFrequentTagBaselineAccuracy = $totalProduct / ($totalPhone + $totalProduct);
-# }
-# print $fhLog "\n"."Baseline of most frequent tag in train file is $mostCommonTag with probability $mostFrequentTagBaselineAccuracy\n"; 
-
-# 
-
-#################### (idk) ####################
-# Tag the test file.
-
+# Open test file.
 open(my $fhTest, "<:encoding(UTF-8)", $testingFile)
     or die "Could not open file '$testingFile' $!";
 
-my $instanceId = "";
+# Stores the text of each instance, as we go from traverse each instance in the following while loop.
 $currentInstance = "";
+
+# Store the current instance id, necessary for answer printouts.
+my $instanceId = "";
 
 # Parse into each "instance".
 while( my $line = <$fhTest> ) {
 
     chomp $line;
 
-    # Check for <instance> tag.
+    # | We will be storing lines until we have all the lines of a single instance.
+    # | So in order to do this, we check for instance tags within the text, and take appropriate action.
+
+    # Check for <instance> tag. If found, store the text (without the tag).
     if($line =~ /.*<\s*instance\s*(.*)>(.*)/) {
         $currentInstance = $2;
         ($instanceId) = $line =~ /<instance.*id="(.*)"/;
     }
-    # Check for </instance> tag
+    # Check for </instance> tag. If found, store text before the tag, and then process the instance.
     elsif ($line =~ /(.*)<\/\s*instance\s*(.*)>(.*)/ ) {
         $currentInstance = $currentInstance."\n".$1;
 
-        # Process currentInstance
+        # Process currentInstance.
+
+        # Store the context string, removing extraneous tags.
         my($context) = $currentInstance =~ /<context>(.*)<\/context>/s;
-        my $contextBackup = $context;
         $context =~ s/(<s>|<\/s>|<@>|<p>|<\/p>)//g;
         $context =~ s/([,\.!\?])/ $1 /g;
+
+        # Get a list of tokens within the context.
         my @tokens = split(/\s+/, $context);
 
-        # We now need to create a feature vector for this context.
-        # We can do this with any set of features we want.
-        # Most of the features will be searching the "bag of word" for certain key words.
-        # Some other features will do different things.
-
+        # Print out beginning of answer.
         print "<answer instance=\"$instanceId\" senseid=\"";
 
+        # Iterate through rankedWords (decision-list), and once one is found within the context, print out the associated sense.
         my $senseFound = 0;
         for my $word (@rankedWords) {
             if( $context =~ /\Q$word/ ) {
@@ -312,26 +338,18 @@ while( my $line = <$fhTest> ) {
                 last;
             }
         }
-        $defaultSense = "phone";
+        # If none of the tests pass, print the default sense.
         if( $senseFound == 0 ) {
             print $defaultSense;
         }
+        
+        # Finish answer printout.
         print "\"/>\n";
         $currentInstance = "";
     }
+
     # Otherwise, we are inbetween instance tags, so add all text to current instance.
     else {
         $currentInstance = $currentInstance."\n".$line;
-    }
-}
-
-sub rankedSort {
-    if( ($bagOfWords{$b}{"correctCount"} / $bagOfWords{$b}{"totalCount"})
-    == ($bagOfWords{$a}{"correctCount"} / $bagOfWords{$a}{"totalCount"}) ) {
-        return $bagOfWords{$b}{"correctCount"} - $bagOfWords{$a}{"correctCount"};
-    }
-    else {
-        return ($bagOfWords{$b}{"correctCount"} / $bagOfWords{$b}{"totalCount"})
-            cmp ($bagOfWords{$a}{"correctCount"} / $bagOfWords{$a}{"totalCount"}); 
     }
 }
